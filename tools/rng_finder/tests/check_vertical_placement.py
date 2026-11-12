@@ -40,7 +40,7 @@ for calculate, values in cases:
         commands = re.findall(r'/summon minecraft:villager (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)', plan)
         assert len(commands) == 300 and Counter(round(float(command[1]) - center[1]) for command in commands) == {-3: 100, 0: 100, 3: 100}
     if calculate == gui.calculate_portal:
-        assert placement(plan, 'Portal component within combined schematic:')[1] == 96
-        assert 'Platform: y=96; portal blocks: y=112..127; obsidian frame y=111,128\n' in plan
+        assert placement(plan, 'Portal component within combined schematic:')[1] == 92
+        assert 'Platform: y=96; portal blocks: y=112..127; obsidian top frame y=128; bottom frame removed (sliced)\n' in plan
         assert root['Blocks'][1].count(90) == 4096
     print(calculate.__name__, 'retries same region at Y=96 and keeps coordinates consistent')

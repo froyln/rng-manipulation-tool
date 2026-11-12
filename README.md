@@ -1,6 +1,6 @@
 # Minecraft 1.12.2 RNG manipulation tool
 
-A Rust candidate calculator and Python desktop interface for Minecraft Java **1.12.2** world-RNG manipulation. The Gold tab exports a complete Pigman RNG machine with an autosave detector, one start lever, sliced portals and an optional saved-world cleanup overlay.
+A Rust candidate calculator and Python desktop interface for Minecraft Java **1.12.2** world-RNG manipulation. The Gold tab exports a complete Pigman RNG machine with an autosave detector, one start lever, sliced portals, stepped packed-ice/water spawn floors and an optional saved-world cleanup overlay.
 
 The current Pigman template omits accidentally captured trees/plants and the obsolete button-delay branch. With a saved Overworld selected, the export is **one `.litematic`** containing the machine and actual nonflammable red-concrete replacement blocks, split into compact subregions. These are exact replacement positions, not borders. Other modes include hostile-mob, Fortune and iron-golem candidate calculations; they have different verification limits.
 
@@ -56,6 +56,7 @@ With the configured MCP runtime:
 ```sh
 python3 tools/rng_finder/tests/check_portal_tick_model.py
 python3 tools/rng_finder/tests/check_portal_successes.py
+python3 tools/rng_finder/tests/check_portal_water.py
 python3 tools/rng_finder/tests/check_combined_litematic.py
 python3 tools/rng_finder/tests/check_rng_cleanup.py
 ```
@@ -69,3 +70,5 @@ tools/rng_finder/target/release/rng-finder --portal 84785424703645 3 0 0 0 0 10 
 ```
 
 That constructed reference seed matches3/3at region0,0; it is not a recommendation to use someone else's world seed/coordinates. The search accounts for successful-spawn yaw and baby/jockey World.rand calls before later checks. See [multi-check model and limits](docs/MULTIPLE_TICKS.md). An aligned three-spawn tick is not a guaranteed3xhourly farm yield.
+
+The default sliced Pigman template transports mobs toward+Z over packed ice, through open fence gates and into a dry receiving channel outside the portal chunk. Leave the outlet gates open and empty/connect the receiving channel to your own collection system. When upgrading an old flat-floor build, remove the old last floor row identified in the new plan before a non-air paste. Always use the new plan's placement origin: the lower receiving floor changes the schematic origin while portal/grid/AFK world coordinates stay fixed. Legacy trace-mode frames retain their old layout.

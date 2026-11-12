@@ -547,14 +547,16 @@ fn portal_main(
     std::fs::write(&plan, format!("Minecraft Java 1.12.2 portal pigman RNG candidate (experimental)\nWorld seed: {seed}; difficulty: {difficulty}\nSearch center: {x}, {z}; radius: {radius} mansion regions; server view distance: {view}\nMansion region: {a}, {b}\nSuggested player position: {:.1}, {}, {:.1} (stand here; verify effective server view distance)\nMansion reset model: World.setRandomSeed(regionX, regionZ, 10387319), then four bounded nextInt(60) draws as in WoodlandMansion.canSpawnStructureAtCoords.\nModeled advances: {count} unbounded World.rand.nextInt() calls between those four bounded RNG draws and the target portal section\nConditional portal check: attempt {attempt} of 3, World.rand.nextInt(2000) = {roll} < difficulty {difficulty}\n\nPortal-array schematic: {}\nPlacement minimum corner (local 0,0,0): {portal_x}, 64, {portal_z}\nDimensions: 18 x 33 x 18; target portal section is one chunk wide and 16 blocks high\nPlatform: y=64; portal blocks: y=80..95; obsidian frame y=79,96\nPortal array: 16 adjacent valid 16 x 16 portal planes; interior blocks x={portal_x1}..{portal_x2}, y=80..95, z={portal_z1}..{portal_z2}. Each Z slice has a shared obsidian frame; ignite each slice separately. This avoids relying on sliced unsupported portal blocks. The MCP 1.12.2 BlockPortal.Size code accepts portal interiors up to 21 x 21.\n\nBUILD AND USE\n1. Use a disposable vanilla Java 1.12.2 world while validating. Place the standalone portal-array schematic at its reported minimum corner, or use the combined schematic's reported minimum corner. Place the original grid at its separate reported corner if using CLI component files. Air in schematic volumes overwrites existing blocks.\n2. Keep the 16 x 16 platform at the reported height and the entire 16 x 16 x 16 portal volume inside one ticking chunk section. Build/light one portal sheet at each Z coordinate; verify all 16 sheets remain intact after adjacent sheets are lit.\n3. Use the Overworld, the reported difficulty, doMobSpawning=true and randomTickSpeed=3. Keep the portal chunk ticking and use the reported player position and actual server view distance. The full portal volume means every updateLCG-selected position in this section is a portal block; updateLCG is not predicted by this tool.\n4. Treat the displayed roll as conditional on the mansion-region reseed being the last relevant World.rand reset, exactly {count} additional unbounded nextInt calls before the target portal section, and no unmodeled World.rand consumers. Confirm the chunk-generation order and intervening calls in your world. The grid's autosave timing and reset cycle are not validated by this tool.\n5. On a passing check, vanilla searches downward for a solid-top block. The bottom obsidian frame is the first such block, so the pigman spawns inside the portal immediately above that frame, not on the lower stone platform. Collection and portal transfer are not designed or verified. A successful earlier check consumes additional RNG for entity construction; this plan only reports the first success and makes no claim about later checks, mob movement, killing or item collection.\n\nGrid schematic: {}\nPlacement minimum corner (local 0,0,0): {gx}, 64, {gz}\nOrientation: unchanged\nAutosave detector approximate bounds: {}, 67, {} to {}, 71, {}\n\nInputs used: world creation seed, difficulty, search center and finite region radius, maximum modeled unbounded RNG advances, and server view distance. Output is a conditional candidate and build layout, not a guaranteed farm rate. A prepared first lever window has been reproduced in a disposable vanilla server; survival construction, modded-server compatibility and farm yield remain unverified. No commands or Carpet rules are required by the schematic.\n", (pos.0+16) as f64 + 0.5,pos.1,pos.2 as f64 + 0.5,portal.display(),grid.display(),gx+194,gz+9,gx+206,gz+17))?;
     if tick_model {
         let mut text = std::fs::read_to_string(&plan)?;
+        text = text.replace(&format!("Placement minimum corner (local 0,0,0): {portal_x}, 64, {portal_z}"), &format!("Placement minimum corner (local 0,0,0): {portal_x}, 60, {portal_z}"));
+        text = text.replace("Dimensions: 18 x 33 x 18", "Dimensions: 18 x 37 x 20");
         text = text.replace("obsidian frame y=79,96", "obsidian top frame y=96; bottom frame removed (sliced)");
         text = text.replace("Each Z slice has a shared obsidian frame; ignite each slice separately. This avoids relying on sliced unsupported portal blocks. The MCP 1.12.2 BlockPortal.Size code accepts portal interiors up to 21 x 21.",
-            "The bottom obsidian is absent; the lower stone platform is retained. This is a sliced final-state blueprint. Survival construction requires lighting with a temporary bottom frame and slicing without neighbor updates; ordinary frame removal breaks the portals.");
+            "The bottom obsidian is absent; a stepped packed-ice and water platform moves pigmen south through open fence gates into a contained dry receiving channel outside the portal chunk. This is a sliced final-state blueprint. Survival construction requires lighting with a temporary bottom frame and slicing without neighbor updates; ordinary frame removal breaks the portals.");
         text = text.replace("16 adjacent valid 16 x 16 portal planes", "16 adjacent sliced 16 x 16 portal planes");
         text = text.replace("Build/light one portal sheet at each Z coordinate; verify all 16 sheets remain intact after adjacent sheets are lit.",
             "Preserve all 4096 pre-lit portal blocks when importing. Avoid neighbor updates to sliced portals; this schematic does not contain an update suppressor for survival construction.");
         text = text.replace("The bottom obsidian frame is the first such block, so the pigman spawns inside the portal immediately above that frame, not on the lower stone platform.",
-            "With the bottom obsidian removed, the retained lower stone platform is the first solid surface; pigmen spawn at platform Y + 1.1.");
+            "With the bottom obsidian removed, the packed-ice floors are the first solid surfaces; pigmen spawn at platform Y + 1.1 inside the water stream.");
         text = text.replace(
             &format!("Autosave detector approximate bounds: {}, 67, {} to {}, 71, {}", gx+194, gz+9, gx+206, gz+17),
             &format!("Grid type: scheduled repeater (Command 1.7 reference, adapted for 1.12)\nTile-grid input repeater: {}, 65, {} (pulse toward +Z into the shared two-line control; desktop export supplies the complete route)\nGrid dimensions: 720 x 7 x 512. Its 32 x 32 active lattice is a subset of the selected 80 x 80 mansion region, not a 1.7 reset region.\nAutosave detector schematic: {}\nPlacement minimum corner (local 0,0,0): {}, 63, {}\nThe desktop combined export connects this detector, its enable input, five-chunk priming line, and automatic grid pulses to one AFK lever. Leave the lever on. Natural vanilla autosaves occur every 900 server ticks; allow the first autosave for synchronization. Stand still with server view distance unchanged.\nGrid and route supports are blue terracotta; the old button/delay branch, accidentally captured trees/plants and debug command blocks are absent. Two upside-down slab crossings isolate the enable signal from the pulse lines.", gx+202, gz+20, detector.display(), (pos.0+16).div_euclid(16)*16, (pos.2.div_euclid(16)-view+1)*16-6));
@@ -568,6 +570,7 @@ fn portal_main(
             "maximum modeled unbounded RNG advances, and server view distance",
             "server view distance and the generated portal chunk's tick rank; the advance-limit input is unused in tick-model mode");
         text = text.replace("A prepared first lever window has been reproduced in a disposable vanilla server;", "Two prepared vanilla Survival-player AFK trials of the connected export produced 2143 and 2141 new pigmen in about 161 seconds each, from one lever click with automatic restarts; this is not gold yield or an unlimited-duration guarantee;");
+        text.push_str(&format!("\nWater transport: north packed-ice floor y=64; middle packed-ice floor y=63; south packed-ice floor y=62; dry receiving floor y=60. Water source row at z={portal_z1}, flowing toward +Z; receiving rows z={}..{}, outside the portal chunk. Blue terracotta walls contain the water; open fence gates at the outlet hold it back while pigmen drop into the dry receiving channel. Keep those gates open. Keep the stream and headroom clear; the receiving basin has no killing or item-collection system. When replacing the old flat floor, clear its last row at y=64, x={portal_x1}..{portal_x2}, z={} before a non-air paste; the new lower stream needs this headroom.\n", portal_z + 17, portal_z + 18, portal_z + 16));
         text = text.replace("The grid's autosave timing and reset cycle are not validated by this tool.", "The combined export supplies the detector-driven cycle; its environmental conditions must still match the test record.");
         std::fs::write(&plan, text)?;
     }
@@ -605,34 +608,58 @@ fn portal_main(
 // Blueprint of the intended final block states; the adjacent frames can be lit individually.
 fn portal_schematic(sliced: bool) -> Vec<u8> {
     const W: usize = 18;
-    const D: usize = 18;
-    const H: usize = 33;
-    let mut blocks = vec![0; W * D * H];
-    let mut data = vec![0; W * D * H];
+    let d = if sliced { 20 } else { 18 };
+    let h = if sliced { 37 } else { 33 };
+    let offset = if sliced { 4 } else { 0 };
+    let mut blocks = vec![0; W * d * h];
+    let mut data = vec![0; W * d * h];
     let mut put = |x: usize, y: usize, z: usize, block, meta| {
-        let i = (y * D + z) * W + x;
+        let i = (y * d + z) * W + x;
         blocks[i] = block;
         data[i] = meta;
     };
     for z in 1..=16 {
         for x in 1..=16 {
-            put(x, 0, z, 1, 0);
+            if !sliced { put(x, 0, z, 1, 0); }
             for y in 16..=31 {
-                put(x, y, z, 90, 1);
+                put(x, y + offset, z, 90, 1);
             }
         }
         for x in 0..W {
             if !sliced {
                 put(x, 15, z, 49, 0);
             }
-            put(x, 32, z, 49, 0);
+            put(x, 32 + offset, z, 49, 0);
         }
         for y in 16..=31 {
-            put(0, y, z, 49, 0);
-            put(17, y, z, 49, 0);
+            put(0, y + offset, z, 49, 0);
+            put(17, y + offset, z, 49, 0);
         }
     }
-    make_schematic(W, H, D, blocks, data, &[])
+    if sliced {
+        // Each seven-block floor run ends in a reachable eighth-cell drop; the final basin is outside the portal chunk.
+        for z in 1..=18 {
+            let floor = if z <= 7 { 4 } else if z <= 14 { 3 } else if z <= 16 { 2 } else { 0 };
+            let level = if z == 1 { 0 } else if z == 8 || z == 15 { 8 } else if z <= 7 { z - 1 } else if z <= 14 { z - 8 } else { z - 15 };
+            for x in 1..=16 {
+                put(x, floor, z, 174, 0);
+                if z <= 16 { put(x, floor + 1, z, 8, level as u8); }
+                if z == 17 { put(x, 3, z, 107, 4); } // Open south-facing gates stop water but pass pigmen into the dry drop.
+                if z == 8 || z == 15 { put(x, floor + 2, z, 8, 7); }
+            }
+        }
+        for z in 0..20 {
+            for y in 1..=if z == 0 { 5 } else { 6 } {
+                put(0, y, z, 159, 11);
+                put(17, y, z, 159, 11);
+            }
+        }
+        for x in 1..=16 {
+            for y in 1..=5 { put(x, y, 0, 159, 11); } // Existing detector route runs above this wall.
+            for y in 1..=6 { put(x, y, 19, 159, 11); }
+        }
+    }
+    make_schematic(W, h, d, blocks, data, &[])
 }
 
 fn golem_player_chunks(view: i32) -> i32 {

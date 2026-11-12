@@ -41,6 +41,8 @@ def _shift_plan_y(plan, shift):
             line = line.replace('Platform: y=64; portal blocks: y=80..95; obsidian frame y=79,96',
                                 f'Platform: y={64 + shift}; portal blocks: y={80 + shift}..{95 + shift}; obsidian frame y={79 + shift},{96 + shift}')
             line = line.replace('Platform: y=64; portal blocks: y=80..95;', f'Platform: y={64 + shift}; portal blocks: y={80 + shift}..{95 + shift};')
+        elif line.startswith('Water transport:'):
+            line = re.sub(r'y=(\d+)', lambda m: f'y={int(m[1]) + shift}', line)
         elif line.startswith('Portal array:'):
             line = re.sub(r'y=(\d+)\.\.(\d+)', lambda m: f'y={int(m[1]) + shift}..{int(m[2]) + shift}', line)
         lines.append(line)

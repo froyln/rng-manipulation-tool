@@ -36,10 +36,15 @@ with tempfile.TemporaryDirectory(prefix='portal-tick-test-') as directory:
     assert all(meta == 11 for block, meta in zip(grid_blocks, tile_grid['Data'][1]) if block == 159)
     portal = read_nbt((output / gui.PORTAL_NAME).read_bytes())
     blocks = portal['Blocks'][1]
-    assert blocks.count(90) == 4096 and blocks.count(1) == 256
-    assert all(blocks[(15 * 18 + z) * 18 + x] == 0 for z in range(18) for x in range(18))
+    assert blocks.count(90) == 4096 and blocks.count(1) == 0
+    assert blocks.count(174) == 288 and blocks.count(8) == 288
+    assert (portal['Width'][1], portal['Height'][1], portal['Length'][1]) == (18,37,20)
+    assert all(blocks[(19 * 20 + z) * 18 + x] == 0 for z in range(18) for x in range(18))
     assert 'sliced final-state blueprint' in plan
     assert 'platform Y + 1.1' in plan
+    assert 'receiving floor y=60' in plan
+    shifted = gui._shift_plan_y(plan,32)
+    assert 'north packed-ice floor y=96; middle packed-ice floor y=95; south packed-ice floor y=94; dry receiving floor y=92' in shifted
     assert tile_grid['TileEntities'][1][1][0]['id'] == (8, 'minecraft:comparator')
     assert 'Modeled advances:' not in plan
     assert 'TICK MODEL BUILD CONDITIONS' in plan
