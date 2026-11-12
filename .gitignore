@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*.class
+**/target/
+*.log
+.env
+.env.*
+!.env.example
+world/
+worlds/
+output/
+.idea/
+.vscode/

@@ -1,0 +1,11 @@
+# Validation and limits
+
+The arithmetic follows Minecraft Java1.12.2 world RNG: a mansion-region reseed, four bounded nextInt(60) calls, player light-check draws, then the modeled tick order and portal rolls. This is not population RNG, entity RNG or updateLCG prediction. Portal coverage avoids needing to predict updateLCG-selected positions. Chunk-list history and additional World.rand consumers still matter.
+
+Prepared vanilla1.12.2 worlds tested one Survival-mode lever interaction followed by natural autosave cycles. The trimmed export produced1181new pigman UUIDs in101.82seconds, with shared-input waves at2.792,36.045,81.050seconds. Earlier full connected exports produced2143and2141 in approximately161seconds versus14 in a no-input control. These are prepared worlds and short observation windows, not resource-acquired survival construction or hourly gold yields.
+
+Actual-terrain copies of a user's world produced696new pigmen/~82seconds vanilla and666/~83seconds with Kisde-Carpet after cleanup. An unchanged vanilla copy also boosted671/~82seconds after controlled AFK warmup/rejoin/start: leftover lava was therefore not established as the sole cause of the earlier live failure. The user subsequently reported that their live farm worked. That report is distinct from independently recorded rate tests. The trimmed version was retested in vanilla, not a new Kisde gameplay run.
+
+Recorded test environment: official vanilla server SHA256fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e, OpenJDK1.8.0_512-b09, AMD Ryzen52600/x86_64,256–768MBheap, Overworld, one Survival protocol player, view10, Hard, clear, normal20TPS, randomTickSpeed3/doMobSpawningtrue. No behavior-changing rules in vanilla tests. The Minecraft runtime used by pinned Java checks is MCP stable39. Other versions, fork behavior, view distances, collection/killing and long-duration reliability require separate verification.
+
+The main research workspace retains raw private test logs and world-specific artifacts; they are deliberately excluded from this standalone distribution. Tests shipped here check arithmetic, exact blockstates/voxel positions, NBT encoding, region bounds, wiring and exports. Full in-game rendering is not established by a parser/unit check.
