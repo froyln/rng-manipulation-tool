@@ -115,7 +115,7 @@ def calculate_portal(values):
         SavedWorld(values['world'])
     def command(output, skip):
         exact = ['--exact-advances'] if values.get('exact', False) else ['--portal-tick-model']
-        return [str(BINARY), '--portal'] + [values[key] for key in ('seed', 'difficulty', 'x', 'z', 'radius', 'advances', 'view')] + [output, '--skip-candidates', str(skip)] + exact
+        return [str(BINARY), '--portal'] + [values[key] for key in ('seed', 'difficulty', 'x', 'z', 'radius', 'advances', 'view')] + [output, '--skip-candidates', str(skip)] + exact + ['--portal-successes', values.get('successes', '1/3').split('/')[0]]
     def assemble(output, shift):
         grid_name = GRID_NAME if values.get('exact', False) else PORTAL_GRID_NAME
         grid = (output / grid_name).read_bytes()
@@ -272,7 +272,7 @@ class FinderApp:
             kind, data = self.messages.get_nowait()
             self.search_button.config(state='normal')
             for key, widget in self.input_widgets.items():
-                widget.config(state='readonly' if key in ('mob', 'ore') else 'normal')
+                widget.config(state='readonly' if key in ('mob', 'ore', 'successes') else 'normal')
             if kind == 'ok':
                 self.result = data
                 terrain_index = re.search(r'Terrain candidate index: (\d+)', data[1])
@@ -517,6 +517,7 @@ class PortalTab(FinderApp):
             ('Measured extra RNG calls (trace mode only)', 'advances', '0'),
             ('Server view distance (chunks)', 'view', '10'),
             ('Saved Overworld for red-concrete replacements (optional)', 'world', ''),
+            ('Target successful random ticks', 'successes', '1/3'),
         ]
         for index, (label, key, default) in enumerate(fields):
             row, col = 2 + (index // 2) * 2, (index % 2) * 2
@@ -525,7 +526,7 @@ class PortalTab(FinderApp):
             self.values[key] = var
             holder = ttk.Frame(frame)
             holder.grid(row=row + 1, column=col, columnspan=2, sticky='ew', padx=(0, 16))
-            widget = ttk.Entry(holder, textvariable=var)
+            widget = (ttk.Combobox(holder, textvariable=var, state='readonly', values=('1/3', '2/3', '3/3')) if key == 'successes' else ttk.Entry(holder, textvariable=var))
             widget.pack(side='left', fill='x', expand=True)
             self.input_widgets[key] = widget
             if key == 'world':
@@ -533,11 +534,11 @@ class PortalTab(FinderApp):
                 browse.pack(side='left', padx=(4, 0))
                 self.input_widgets['world_browse'] = browse
         exact_box = ttk.Checkbutton(frame, text='Trace mode: use measured advances instead of deriving the tick sequence', variable=self.exact)
-        exact_box.grid(row=10, column=0, columnspan=4, sticky='w', pady=(8, 0))
+        exact_box.grid(row=12, column=0, columnspan=4, sticky='w', pady=(8, 0))
         self.input_widgets['exact'] = exact_box
-        ttk.Label(frame, text='Select a saved Overworld to export ONE .litematic containing the RNG build and small red-concrete replacement subregions. Each red block is an actual replacement position, not an outline. No world is edited. Follow each file’s placement origin in the plan.', foreground='#8b3e00', wraplength=800).grid(row=12, column=0, columnspan=4, sticky='w', pady=(12, 8))
+        ttk.Label(frame, text='Select a saved Overworld to export ONE .litematic containing the RNG build and small red-concrete replacement subregions. Each red block is an actual replacement position, not an outline. No world is edited. 2/3 and 3/3 matches are rarer and may need a wider search. Follow the placement origin in the plan.', foreground='#8b3e00', wraplength=800).grid(row=13, column=0, columnspan=4, sticky='w', pady=(12, 8))
         buttons = ttk.Frame(frame)
-        buttons.grid(row=13, column=0, columnspan=4, sticky='ew')
+        buttons.grid(row=14, column=0, columnspan=4, sticky='ew')
         self.search_button = ttk.Button(buttons, text='Find portal candidate', command=self.search)
         self.search_button.pack(side='left')
         self.current_index = -1
@@ -547,9 +548,9 @@ class PortalTab(FinderApp):
         self.export_button.pack(side='left', padx=8)
         self.status = tk.StringVar(value='Enter a world seed to begin.')
         ttk.Label(buttons, textvariable=self.status).pack(side='left', padx=8)
-        ttk.Label(frame, text='Result', font=('TkDefaultFont', 11, 'bold')).grid(row=14, column=0, columnspan=4, sticky='w', pady=(14, 4))
+        ttk.Label(frame, text='Result', font=('TkDefaultFont', 11, 'bold')).grid(row=15, column=0, columnspan=4, sticky='w', pady=(14, 4))
         output_frame = ttk.Frame(frame)
-        output_frame.grid(row=15, column=0, columnspan=4, sticky='nsew')
+        output_frame.grid(row=16, column=0, columnspan=4, sticky='nsew')
         self.output = tk.Text(output_frame, wrap='word', height=10, state='disabled', font=('TkFixedFont', 10))
         scroll = ttk.Scrollbar(output_frame, command=self.output.yview)
         self.output.configure(yscrollcommand=scroll.set)
@@ -557,7 +558,7 @@ class PortalTab(FinderApp):
         self.output.pack(side='left', fill='both', expand=True)
         for col in range(4):
             frame.columnconfigure(col, weight=1)
-        frame.rowconfigure(15, weight=1)
+        frame.rowconfigure(16, weight=1)
         for var in self.values.values():
             var.trace_add('write', self.invalidate)
         self.exact.trace_add('write', self.invalidate)
@@ -592,6 +593,8 @@ class PortalTab(FinderApp):
         try:
             if not values['seed'] or '\n' in values['seed'] or '\r' in values['seed']:
                 raise ValueError('Enter a world creation seed on one line.')
+            if values['successes'] not in ('1/3', '2/3', '3/3'):
+                raise ValueError('Choose 1/3, 2/3 or 3/3 successful random ticks.')
             keys = ('difficulty', 'x', 'z', 'radius', 'advances', 'view')
             difficulty, x, z, radius, advances, view = (int(values[key]) for key in keys)
             if not 1 <= difficulty <= 3:

@@ -54,12 +54,27 @@ fn mansion_reset_rng(seed: i64, region_x: i32, region_z: i32) -> JavaRandom {
     rng
 }
 
-fn first_portal_success(rng: &mut JavaRandom, difficulty: i32) -> Option<(usize, i32)> {
-    // Vanilla randomTickSpeed defaults to 3; a full portal section makes all three positions portals.
-    (0..3).find_map(|attempt| {
+fn portal_success(rng: &mut JavaRandom, difficulty: i32, required: usize) -> Option<(usize, i32)> {
+    // Successful ItemMonsterPlacer/EntityZombie spawns consume World.rand before the next check.
+    let mut successes = 0;
+    for attempt in 1..=3 {
         let roll = rng.next_int(2000);
-        (roll < difficulty).then_some((attempt + 1, roll))
-    })
+        if roll < difficulty {
+            successes += 1;
+            if successes == required { return Some((attempt, roll)); }
+            portal_spawn_draws(rng);
+        }
+    }
+    None
+}
+
+fn portal_spawn_draws(rng: &mut JavaRandom) {
+    rng.next(24); // ItemMonsterPlacer: yaw.
+    if (rng.next(24) as f64 / 16_777_216.0) < 0.05 { // EntityZombie: baby.
+        if (rng.next(24) as f64 / 16_777_216.0) >= 0.05 {
+            rng.next(24); // New-chicken check only when the existing-chicken roll fails.
+        }
+    }
 }
 
 fn portal_tick_candidate(
@@ -68,6 +83,7 @@ fn portal_tick_candidate(
     region_z: i32,
     tick_rank: usize,
     difficulty: i32,
+    required: usize,
 ) -> Option<(usize, i32)> {
     let mut rng = mansion_reset_rng(seed, region_x, region_z);
     rng.next_int(1);
@@ -77,7 +93,7 @@ fn portal_tick_candidate(
     for _ in 0..tick_rank {
         rng.next_int(16);
     }
-    first_portal_success(&mut rng, difficulty)
+    portal_success(&mut rng, difficulty, required)
 }
 
 fn chunk_hash(x: i32, z: i32) -> u32 {
@@ -409,6 +425,7 @@ fn portal_main(
     skip: usize,
     exact_advances: bool,
     tick_model: bool,
+    required: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if tick_model && exact_advances {
         return Err("Choose tick model or exact advances, not both".into());
@@ -455,7 +472,7 @@ fn portal_main(
                         .ok_or("Portal chunk is outside the ticking area")?
                         + 1;
                     if let Some((attempt, roll)) =
-                        portal_tick_candidate(seed, a, b, rank, difficulty)
+                        portal_tick_candidate(seed, a, b, rank, difficulty, required)
                     {
                         if remaining > 0 {
                             remaining -= 1;
@@ -479,7 +496,7 @@ fn portal_main(
                 };
                 for count in counts {
                     let mut target_rng = rng.clone();
-                    if let Some((attempt, roll)) = first_portal_success(&mut target_rng, difficulty)
+                    if let Some((attempt, roll)) = portal_success(&mut target_rng, difficulty, required)
                     {
                         if remaining > 0 {
                             remaining -= 1;
@@ -494,7 +511,7 @@ fn portal_main(
         }
     }
     let (a, b, pos, count, attempt, roll) =
-        found.ok_or("No matching region within the chosen radius and advance limit")?;
+        found.ok_or("No matching region for the requested successful random ticks within the chosen radius and advance limit")?;
     let (gx, gz) = if tick_model {
         (a * 1280 - 208, b * 1280)
     } else {
@@ -554,6 +571,12 @@ fn portal_main(
         text = text.replace("The grid's autosave timing and reset cycle are not validated by this tool.", "The combined export supplies the detector-driven cycle; its environmental conditions must still match the test record.");
         std::fs::write(&plan, text)?;
     }
+    let mut text = std::fs::read_to_string(&plan)?;
+    text = format!("Requested manipulation: at least {required}/3 successful portal random ticks per aligned game tick.\nThe reported conditional portal check is the requested success number {required}; intervening successful spawns include yaw and baby/jockey World.rand calls. This is not a guaranteed farm-rate multiplier.\n\n{text}");
+    if required > 1 {
+        text = text.replace("this plan only reports the first success and makes no claim about later checks, mob movement, killing or item collection.", "this search follows the spawn RNG calls through the requested success. It assumes every passing check can spawn; blocked floors or modded spawn hooks invalidate this sequence. Mob movement, killing and collection remain unmodeled.");
+    }
+    std::fs::write(&plan, text)?;
     let order = portal_tick_order(pos.0 + 16, pos.2, view);
     let mut file = std::fs::OpenOptions::new().append(true).open(&plan)?;
     writeln!(file, "\nCONDITIONAL 1.12.2 CHUNK TICK ORDER\nFresh single non-spectator player list, all chunks initialized; player X/Z use the reported block centers (+0.5). X-major/Z-minor insertion order, chunk-center distance strictly <128 blocks. Old PigmanRNG Chunk Hash Order is for 1.8. Movement, other players, missing/uninitialized chunks and list history invalidate this fresh-list prediction. Tick rank is not an RNG advance count. See research/pigman-rng.md, RandomFT archive correction (2026-11-11).")?;
@@ -964,6 +987,15 @@ fn golem_main(args: &[String], skip: usize) -> Result<(), Box<dyn std::error::Er
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut arguments: Vec<String> = std::env::args().skip(1).collect();
+    let portal_requested = arguments.iter().any(|arg| arg == "--portal");
+    let required = if let Some(i) = arguments.iter().position(|arg| arg == "--portal-successes") {
+        if !portal_requested { return Err("--portal-successes is only valid in portal mode".into()); }
+        arguments.remove(i);
+        let value: usize = arguments.get(i).ok_or("Missing --portal-successes value")?.parse()?;
+        arguments.remove(i);
+        if !(1..=3).contains(&value) { return Err("Portal successes must be 1, 2 or 3".into()); }
+        value
+    } else { 1 };
     let auto_height = if let Some(i) = arguments.iter().position(|arg| arg == "--auto-height") {
         arguments.remove(i);
         true
@@ -1003,7 +1035,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return golem_main(&arguments, skip);
     }
     if arguments.first().is_some_and(|arg| arg == "--portal") {
-        return portal_main(&arguments, skip, exact_advances, tick_model);
+        return portal_main(&arguments, skip, exact_advances, tick_model, required);
     }
     let mut view = 10;
     let mut min_players = 1;
@@ -1206,10 +1238,23 @@ mod tests {
     }
     #[test]
     fn portal_tick_model_java_reference() {
-        assert_eq!(portal_tick_candidate(12345, 6, 7, 82, 3), Some((3, 1)));
-        assert_eq!(portal_tick_candidate(12345, 6, 7, 82, 1), None);
-        assert_eq!(portal_tick_candidate(12345, 0, 5, 82, 3), None);
-        assert_eq!(portal_tick_candidate(12345, 6, 7, 81, 3), None);
+        assert_eq!(portal_tick_candidate(12345, 6, 7, 82, 3, 1), Some((3, 1)));
+        assert_eq!(portal_tick_candidate(12345, 6, 7, 82, 1, 1), None);
+        assert_eq!(portal_tick_candidate(12345, 0, 5, 82, 3, 1), None);
+        assert_eq!(portal_tick_candidate(12345, 6, 7, 81, 3, 1), None);
+    }
+
+    #[test]
+    fn portal_multiple_successes_java_reference() {
+        assert_eq!(portal_tick_candidate(171656809007210, 0, 0, 82, 3, 1), Some((1, 1)));
+        assert_eq!(portal_tick_candidate(171656809007210, 0, 0, 82, 3, 2), Some((2, 2)));
+        assert_eq!(portal_tick_candidate(171656809007210, 0, 0, 82, 3, 3), None);
+        assert_eq!(portal_tick_candidate(84785424703645, 0, 0, 82, 3, 3), Some((3, 1)));
+        for (seed, state) in [(0, 234029835660143), (29, 57156724566644), (16414, 10881443173516)] {
+            let mut rng = JavaRandom::new(seed);
+            portal_spawn_draws(&mut rng);
+            assert_eq!(rng.0, state); // Adult, baby/new-chicken roll, baby/existing-chicken roll.
+        }
     }
 
     #[test]
@@ -1326,9 +1371,9 @@ mod tests {
             [2, 1501, 446]
         );
         let mut rng = mansion_reset_rng(12345, 0, 5);
-        assert_eq!(first_portal_success(&mut rng, 3), Some((3, 2)));
+        assert_eq!(portal_success(&mut rng, 3, 1), Some((3, 2)));
         let mut rng = mansion_reset_rng(12345, 0, 5);
-        assert_eq!(first_portal_success(&mut rng, 2), None);
+        assert_eq!(portal_success(&mut rng, 2, 1), None);
         let mut rng = mansion_reset_rng(12345, 2, -11);
         for _ in 0..7 {
             rng.next_int_unbounded();
@@ -1345,7 +1390,7 @@ mod tests {
         for _ in 0..29 {
             rng.next_int_unbounded();
         }
-        assert_eq!(first_portal_success(&mut rng, 3), Some((1, 0)));
+        assert_eq!(portal_success(&mut rng, 3, 1), Some((1, 0)));
     }
 
     #[test]

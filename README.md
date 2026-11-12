@@ -55,8 +55,17 @@ With the configured MCP runtime:
 
 ```sh
 python3 tools/rng_finder/tests/check_portal_tick_model.py
+python3 tools/rng_finder/tests/check_portal_successes.py
 python3 tools/rng_finder/tests/check_combined_litematic.py
 python3 tools/rng_finder/tests/check_rng_cleanup.py
 ```
 
 Build the release binary before Python checks. Additional focused checks are in `tools/rng_finder/tests/`. These are script-based checks, not all discoverable by unittest. See [validation limits](docs/VALIDATION.md) and [source attribution](THIRD_PARTY.md).
+
+Portal CLI searches accept `--portal-successes 1`, `2` or `3` (default1), for example:
+
+```sh
+tools/rng_finder/target/release/rng-finder --portal 84785424703645 3 0 0 0 0 10 output --portal-tick-model --portal-successes 3
+```
+
+That constructed reference seed matches3/3at region0,0; it is not a recommendation to use someone else's world seed/coordinates. The search accounts for successful-spawn yaw and baby/jockey World.rand calls before later checks. See [multi-check model and limits](docs/MULTIPLE_TICKS.md). An aligned three-spawn tick is not a guaranteed3xhourly farm yield.
