@@ -43,17 +43,6 @@ For the standalone interactive calculator:
 cargo run --release --manifest-path tools/rng_finder/Cargo.toml
 ```
 
-## Pigman workflow
-
-1. Open **Gold**, enter your seed, difficulty, search area and actual server view distance. Optionally select a saved Overworld; prefer a saved/stopped copy for a consistent cleanup scan. Selecting a world reads it; it does not edit the save.
-2. Find a candidate and review its plan. The generated-terrain collision check is not a complete saved-world RNG-cleanliness check. With a world selected, lava cleanup follows connected supply across chunk boundaries; old red cleanup wool is replaced too. Missing required saved chunks fail explicitly.
-3. Save the schematic and plan. Use the **placement origin printed in that plan**, no rotation/mirroring, and unchanged subregion offsets. Cleanup regions can have negative offsets. Do not use someone else's seed-specific coordinates.
-4. Preview in a disposable world copy. Paste **non-air only**, enable all required subregions and wait for queued paste operations to finish. A non-air paste does not remove obsolete blocks already present. Full repasting can overwrite a custom collection floor.
-5. Sliced portal blocks require a state-preserving import. Normal lighting needs complete temporary frames and slicing without neighbor updates. The tool does not provide a survival update suppressor, killing system or collection system.
-6. For the tested setup, use one stationary player at the exact reported AFK center, view distance10, Hard, clear weather, randomTickSpeed3, doMobSpawningtrue and normal20TPS. Start with the lever OFF, disconnect/rejoin already at AFK, then turn it ON and leave it ON. Allow at least90seconds for natural autosave cycles. Player/chunk-list history, other players, weather, terrain changes and server modifications can change behavior.
-
-Saved-world cleanup is conservative, not proof of every possible scheduled/entity/modded RNG consumer. Rescan after terrain changes. Native exports reject more than32regions or16,777,216total regional cells rather than allocate a giant enclosing air box.
-
 ## Verification
 
 ```sh
