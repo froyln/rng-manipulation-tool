@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from combine import read_nbt,placement,combine
 from combined_litematic import combined_litematic
-import gui
+import backend as gui
 with tempfile.TemporaryDirectory(prefix='portal-water-') as d:
  out=Path(d)/'export'
  subprocess.run([str(gui.BINARY),'--portal','84785424703645','3','0','0','0','0','10',str(out),'--portal-tick-model','--portal-successes','3'],check=True,capture_output=True)

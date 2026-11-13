@@ -26,3 +26,9 @@ SHA256:
 ## RandomFT and RNG research
 
 RandomFT's Pigman tools and tick-order explanations informed the1.12research; Command's older tutorial supplied the physical references above. The exported program is an independently developed calculator/integration, not a redistribution of their calculator JARs. Source authors retain rights to their designs/assets; no blanket relicensing of these third-party materials is implied.
+
+## Shared-detector derived Xcom asset
+
+`tools/rng_finder/reference/prepare_shared_detector.py` derives `xcom-shared-detector-grid.schematic` from the unchanged Xcom original, removing 206 obsolete non-air detector/feed blocks and 12 comparators while preserving the loading lattice. It reuses Command’s already adapted sand detector. Original attribution and redistribution limitations above remain unchanged.
+
+The desktop crate depends on Iced and RFD as declared in its Cargo manifest/lockfile; their upstream licenses apply. Minecraft binaries, decompiled runtime code and private research worlds/logs are not distributed.

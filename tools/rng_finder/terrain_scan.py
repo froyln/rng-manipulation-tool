@@ -44,8 +44,17 @@ def scan(schematic, plan):
         index = occupied.find(b'\x01', index + 1)
     attempts = re.search(r'Modeled spawn-attempt positions.*?:\n(.*?)\n\n', plan, re.S)
     if attempts:
+        mob = re.search(r'^Target: (\w+)', plan, re.M).group(1)
+        headroom = 3 if mob == 'enderman' else 1 if mob == 'spider' else 2
+        radius = 1 if mob == 'spider' else 0
         for _, x, y, z in re.findall(r'(\d+)\.\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)', attempts.group(1)):
-            required_air.update((int(x), int(y) + dy, int(z)) for dy in range(1, 4))
+            required_air.update((int(x)+dx, int(y)+dy, int(z)+dz) for dx in range(-radius,radius+1)
+                                for dz in range(-radius,radius+1) for dy in range(headroom))
+    roof = re.search(r'Mob roof bounds: (-?\d+), (\d+), (-?\d+) to (-?\d+), (\d+), (-?\d+)', plan)
+    if roof and attempts:
+        x0,ry,z0,x1,_,z1 = map(int,roof.groups())
+        floors = {(int(x),int(y)-1,int(z)) for _,x,y,z in re.findall(r'(\d+)\.\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)',attempts.group(1))}
+        required_air.update((x,y,z) for x in range(x0,x1+1) for z in range(z0,z1+1) for y in range(ry-4,ry) if (x,y,z) not in floors)
     golem = re.search(r'Modeled first golem spawn block:\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)', plan)
     portal_cells = set()
     if golem:

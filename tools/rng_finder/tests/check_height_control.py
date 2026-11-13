@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import gui
+import backend as gui
 from combine import read_nbt
 from terrain_scan import _classpath, CLASS_DIR
 

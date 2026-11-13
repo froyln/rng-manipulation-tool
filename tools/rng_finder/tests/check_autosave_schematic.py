@@ -55,3 +55,16 @@ for i, (block, meta) in enumerate(zip(original['Blocks'][1],original['Data'][1])
 assert removed == 2126, removed
 assert clean['Blocks'][1][(1*512+21)*720+202] == 55
 print('Trees/plants and obsolete button delay removed; all shared control and lattice cells retained')
+
+# The replacement reaches Xcom's preserved clock input and isolates its one-time startup piston.
+for region in ((2,2),(-7,-5)):
+    for view in (3,10,32):
+        for base,player_y in ((64,66),(152,159)):
+            grid=(region[0]*1280-112,base,region[1]*1280-112)
+            player=(grid[0]+168,player_y,grid[2]+(1-view)*16+8)
+            marks={tuple(m[:3]):tuple(m[3:]) for m in detector_marks(player,grid,view,False)}
+            assert marks[grid[0]+200,grid[1]+3,grid[2]+12]==(55,0)
+            assert marks[grid[0]+188,grid[1]+7,grid[2]-1]==(33,3)
+            assert marks[player[0]-1,player[1],player[2]-2]==(218,3)
+            assert marks[player[0]+5,player[1],player[2]-10]==(93,1)
+print('Xcom clock input/startup isolation and continuous adapters checked at positive/negative coordinates and shifted heights')

@@ -145,7 +145,7 @@ fn control_position(region_x: i32, region_z: i32, view: i32) -> (i32, i32, i32) 
 fn warn_control_boundary(plan: &Path, region_x: i32, region_z: i32, view: i32) -> io::Result<()> {
     let mut file = std::fs::OpenOptions::new().append(true).open(plan)?;
     let (x, _, z) = control_position(region_x, region_z, view);
-    writeln!(file, "\nCONTROL BOUNDARY: reference player column X {x}, Z {z}; use the player Y reported above. The blue platform and detector chunk are inside the view square and row 2 onwards is outside. The portal setup uses the adjacent chunk to the east. Some starter-line blocks share the loaded detector row. This is a geometric candidate, not proof of ticking, unloading, calibration, or a working reset cycle. Verify in a disposable 1.12.2 world.")
+    writeln!(file, "\nCONTROL BOUNDARY: reference player column X {x}, Z {z}; use the player Y reported above. The preserved blue control platform is inside the view square and row 2 onwards is outside. The replacement sand detector is placed separately at the north lazy boundary; its priming reaches beyond the player view square. The portal setup uses the adjacent chunk to the east. Some starter-line blocks share the loaded detector row. This is a geometric candidate, not proof of ticking, unloading, calibration, or a working reset cycle. Verify in a disposable 1.12.2 world.")
 }
 
 fn hostile_threshold(view: i32, players: i32) -> i32 {
@@ -224,7 +224,8 @@ fn candidate(
     let dz = rng.next_int(6) - rng.next_int(6);
     // These intervals follow the normal-biome hostile weights in LightningFinder MobList.
     let weight = rng.next_int(515);
-    if !mob.matches(weight) || y < 5 || y > 251 || y >= y_bound - 2 {
+    // The AFK player stands one block higher and its detector adapter rises12more blocks.
+    if !mob.matches(weight) || y < 5 || y > 242 || y > y_bound - 6 {
         return None;
     }
     let px = rx
@@ -388,6 +389,9 @@ fn fortune_main(args: &[String], skip: usize) -> Result<(), Box<dyn std::error::
     let grid_x = region_x * 1280 - 112;
     let grid_z = region_z * 1280 - 112;
     let path = Path::new(&args[10]);
+    if ["rng-combined.schematic", "rng-combined-plan.txt", "autosave-detector.schematic"].iter().any(|name| path.join(name).exists()) {
+        return Err("Output files already exist; choose another directory".into());
+    }
     std::fs::create_dir_all(path)?;
     let grid = path.join("xcom-original-grid.schematic");
     let plan = path.join("rng-finder-plan.txt");
@@ -396,10 +400,11 @@ fn fortune_main(args: &[String], skip: usize) -> Result<(), Box<dyn std::error::
     }
     std::fs::write(
         &grid,
-        include_bytes!("../reference/xcom-chunk-loading-grid.schematic"),
+        include_bytes!("../reference/xcom-shared-detector-grid.schematic"),
     )?;
     std::fs::write(&plan, format!("Minecraft Java 1.12.2 Fortune-drop candidate (experimental)\nWorld seed: {seed}\nOre: {ore}; Fortune: {level}; requested minimum: {target}\nSearch center: {x}, {z}; radius: {radius} regions\nServer view distance: {view}\nMansion region: {region_x}, {region_z}\nSuggested mining/player position: {}, {}, {} (check terrain)\nModeled drop quantity: {drops} items from one ore\nModeled advances after reset: {count} unbounded nextInt calls\n\nGrid schematic: {}\nPlacement minimum corner (local 0,0,0): {grid_x}, 64, {grid_z}\nOrientation: unchanged\nAutosave detector approximate bounds: {}, 67, {} to {}, 71, {}\n\nAssumes an Overworld mansion-region world RNG reset, four nextInt calls, exactly {count} additional unbounded nextInt calls, no other world RNG calls before quantity selection, a normal Fortune harvest, and drops enabled. Redstone ore activation can consume world RNG before the harvest; quartz ore must be brought to the Overworld. Hopper/piston advance mechanisms need separate verification. XP and consecutive ore breaks are not modeled. The original loading grid, its calibration, and this mining setup have not been validated as a complete build. Test in a disposable 1.12.2 world.\n", mining.0, mining.1, mining.2, grid.display(), grid_x+194, grid_z+9, grid_x+206, grid_z+17))?;
     warn_control_boundary(&plan, region_x, region_z, view)?;
+    finish_detector_export(path)?;
     println!("Saved {} and {}", grid.display(), plan.display());
     Ok(())
 }
@@ -518,6 +523,9 @@ fn portal_main(
         (a * 1280 - 112, b * 1280 - 112)
     };
     let path = Path::new(&args[8]);
+    if ["rng-combined.schematic", "rng-combined-plan.txt", "autosave-detector.schematic"].iter().any(|name| path.join(name).exists()) {
+        return Err("Output files already exist; choose another directory".into());
+    }
     std::fs::create_dir_all(path)?;
     let grid = path.join(if tick_model {
         "tile-tick-grid.schematic"
@@ -533,7 +541,7 @@ fn portal_main(
     let grid_bytes: &[u8] = if tick_model {
         include_bytes!("../reference/command-tile-tick-grid-1.12.schematic")
     } else {
-        include_bytes!("../reference/xcom-chunk-loading-grid.schematic")
+        include_bytes!("../reference/xcom-shared-detector-grid.schematic")
     };
     std::fs::write(&grid, grid_bytes)?;
     std::fs::write(&portal, portal_schematic(tick_model))?;
@@ -598,9 +606,11 @@ fn portal_main(
             index + 1
         )?;
     }
+    drop(file);
     if !tick_model {
         warn_control_boundary(&plan, a, b, view)?;
     }
+    finish_detector_export(path)?;
     println!("Saved {} and {}", grid.display(), plan.display());
     Ok(())
 }
@@ -984,6 +994,9 @@ fn golem_main(args: &[String], skip: usize) -> Result<(), Box<dyn std::error::Er
     let grid_x = region_x * 1280 - 112;
     let grid_z = region_z * 1280 - 112;
     let path = Path::new(&args[6]);
+    if ["rng-combined.schematic", "rng-combined-plan.txt", "autosave-detector.schematic"].iter().any(|name| path.join(name).exists()) {
+        return Err("Output files already exist; choose another directory".into());
+    }
     std::fs::create_dir_all(path)?;
     let grid = path.join("xcom-original-grid.schematic");
     let village = path.join("golem-village.schematic");
@@ -993,7 +1006,7 @@ fn golem_main(args: &[String], skip: usize) -> Result<(), Box<dyn std::error::Er
     }
     std::fs::write(
         &grid,
-        include_bytes!("../reference/xcom-chunk-loading-grid.schematic"),
+        include_bytes!("../reference/xcom-shared-detector-grid.schematic"),
     )?;
     let (village_bytes, material_counts) =
         village_schematic(offset).ok_or("Portal or villager housing conflicts with the village")?;
@@ -1003,12 +1016,26 @@ fn golem_main(args: &[String], skip: usize) -> Result<(), Box<dyn std::error::Er
     let village_z = center.2 - 14;
     std::fs::write(&plan, format!("Minecraft Java 1.12.2 iron-golem candidate (experimental)\nWorld seed: {seed}\nSearch center: {x}, {z}; radius: {radius} regions\nServer view distance: {view}; modeled ticking chunks: {chunks}\nMansion region: {region_x}, {region_z}\nSuggested village center: {}, {}, {} (must be the actual registered center)\nPlayer position: {:.1}, {}, {:.1} (one non-spectator player; remain at this chunk position)\nModeled first spawn offset from village center: {}, {}, {}\nModeled first golem spawn block: {}, {}, {} (verify village radius and clearance)\nSuggested Nether portal search center: {}, {} (spawn X/Z scaled by 1/8 and truncated as in 1.12.2 Entity.changeDimension; build/verify a receiving portal nearby)\n\nVillage schematic: {village_path}\nVillage schematic minimum corner: {village_x}, 60, {village_z}\nVillage schematic dimensions: 23 x 13 x 29 blocks; orientation unchanged\nVillager design: 300 living adults, 100 single-occupant glass cells on each of three levels at center Y offsets -3, 0, +3. All cells are within the village count AABB and the modeled spawn/portal volume is reserved.\nRequired villager count: 300 counted villagers for capacity for 30 successful spawns between 30-tick golem-count refreshes (one success per tick target). `Village.tick` uses floor(villagers / 10): 30 villagers allow {}, 300 allow {}, 301-309 still allow {}, and 310 allow {}. Villagers are recounted every 20 ticks; keep all 300 alive and in the village AABB.\nVillage schematic material counts: stone={}, glass={}, wooden door blocks={} (24 doorways), obsidian={}, portal={}; villager entities=300.\nUse an importer that preserves schematic entities. WorldEdit 6.1 drops them; the desktop combined plan includes 300 `/summon` commands if needed, or bring 300 adults into the enclosed cells. Do not summon twice. The portal is a final-state blueprint: build/light the obsidian frame, then verify golems enter it and transfer to the receiving portal near the suggested Nether coordinates. Nether killing and collection are not included.\n\nGrid schematic: {}\nPlacement minimum corner (local 0,0,0): {grid_x}, 64, {grid_z}\nOrientation: unchanged\nAutosave detector approximate bounds: {}, 67, {} to {}, 71, {}\n\nBuild/conditions: vanilla Java 1.12.2; effective server view distance; Overworld; stable player position and no other players in that dimension; clear weather; doMobSpawning=false; randomTickSpeed=0; one village record in the Overworld VillageCollection; at least 21 valid registered wooden doors (24 are supplied); at least 300 live villagers inside the village AABB; and fewer cached golems than floor(villagers/10). Keep the 2x4x2 spawn volume clear of normal cubes, with a top-solid support below; the portal blocks are non-normal cubes. Verify door sky exposure, actual village center, terrain, and all 300 counts. Ensure no other village records are present; these tick even when distant. Keep all modeled chunks fully initialized.\nThe model follows the mansion-region reset, player-light draws, one nextInt(16) per modeled chunk, one village door-check draw, a passing nextInt(7000), then only the first spawn-position triple. Weather, other village ticks, chunk history, actual village state and failed spawn attempts can shift the stream. The stated gamerules suppress natural-mob and random-block RNG consumers; Village.tick still performs iron golem checks. A blocked first candidate can trigger up to nine more triples, which this candidate does not model. The terrain scan is base generation only. Neither the autosave reset cycle, portal transfer, spawn, nor the design's rate has been reproduced in vanilla gameplay. Test in a disposable 1.12.2 world.\n",center.0,center.1,center.2,player.0 as f64 + 0.5,player.1,player.2 as f64 + 0.5,offset.0,offset.1,offset.2,spawn.0,spawn.1,spawn.2,nether_target.0,nether_target.1,village_golem_limit(30),village_golem_limit(300),village_golem_limit(301),village_golem_limit(310),material_counts[0],material_counts[1],material_counts[2],material_counts[3],material_counts[4],grid.display(),grid_x+194,grid_z+9,grid_x+206,grid_z+17))?;
     warn_control_boundary(&plan, region_x, region_z, view)?;
+    finish_detector_export(path)?;
     println!(
         "Saved {}, {} and {}",
         grid.display(),
         village.display(),
         plan.display()
     );
+    Ok(())
+}
+
+// Keep CLI and desktop detector wiring in the existing Python/NBT implementation.
+fn finish_detector_export(path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let executable = std::env::current_exe()?;
+    let tool = executable.ancestors().find(|p| p.join("export_shared_detector.py").is_file())
+        .ok_or("Keep the finder binary inside its tool directory; shared detector export requires export_shared_detector.py")?;
+    let output = std::process::Command::new(if cfg!(windows) { "python" } else { "python3" })
+        .arg(tool.join("export_shared_detector.py")).arg(path).output()?;
+    if !output.status.success() {
+        return Err(format!("Shared detector export failed: {}", String::from_utf8_lossy(&output.stderr)).into());
+    }
     Ok(())
 }
 
@@ -1207,21 +1234,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let grid_y = 64.max(c.player.1 - 7);
     println!("Source-grid placement candidate (UNTESTED): {grid_x}, {grid_y}, {grid_z}; orientation unchanged.");
     println!("Use these as the schematic's local minimum-corner coordinates (x,z increase across its footprint)." );
-    println!(
-        "Integrated detector occupies approximately {}, {}, {} to {}, {}, {}.",
-        grid_x + 194,
-        grid_y + 3,
-        grid_z + 9,
-        grid_x + 206,
-        grid_y + 7,
-        grid_z + 17
-    );
-    println!("The template includes the detector, but exact reset order and calibration in your world still need an in-game check.");
+    println!("The derived grid removes its obsolete detector. The connected export includes the Command sand detector, enable/priming routes and one AFK lever; use its combined placement plan. Reset timing remains conditional on the mode's recorded requirements.");
     let dest = prompt(
-        "Export the original grid and this candidate plan? Directory [rng-output]: ",
+        "Export the connected grid and this candidate plan? Directory [rng-output]: ",
         Some("rng-output"),
     )?;
     let path = Path::new(&dest);
+    if ["rng-combined.schematic", "rng-combined-plan.txt", "autosave-detector.schematic"].iter().any(|name| path.join(name).exists()) {
+        return Err("Output files already exist; choose another directory".into());
+    }
     std::fs::create_dir_all(path)?;
     let grid = path.join("xcom-original-grid.schematic");
     let plan = path.join("rng-finder-plan.txt");
@@ -1230,7 +1251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     std::fs::write(
         &grid,
-        include_bytes!("../reference/xcom-chunk-loading-grid.schematic"),
+        include_bytes!("../reference/xcom-shared-detector-grid.schematic"),
     )?;
     let attempts = c
         .attempts
@@ -1249,8 +1270,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(std::fs::OpenOptions::new().append(true).open(&plan)?,
         "\nRequired height control: an opaque block at {}, {}, {}; keep light-blocking blocks out of the column above it and verify the heightmap.",
         c.initial.0, bound - 2, c.initial.2)?;
+    writeln!(std::fs::OpenOptions::new().append(true).open(&plan)?,
+        "\nMob roof: opaque bottom stone slabs at y={}; 15-block overhang around the sampled column and all modeled attempts; three clear blocks below. The roof stays below the height-control stone so the modeled Y bound remains {bound}. Bottom slabs prevent roof-top spawns and do not random tick. Clear the reported body/headroom before a non-air paste, including old glass spawn guards. Later pack attempts are conditional on pack length and earlier spawn initialization; only the first attempt has an unchanged call prefix.", c.initial.1 + 3)?;
     warn_control_boundary(&plan, c.region_x, c.region_z, view)?;
-    println!("Saved {} and {}. The schematic is an original template; its calibration and the predicted gameplay result remain experimental.", grid.display(), plan.display());
+    finish_detector_export(path)?;
+    println!("Saved {} and {}. The connected schematic preserves the loading grid; its calibration and the predicted gameplay result remain experimental.", grid.display(), plan.display());
     Ok(())
 }
 
@@ -1310,6 +1334,12 @@ mod tests {
         assert_eq!(c.initial, (17069, 35, -16229));
         assert_eq!(c.attempts[0], (17069, 35, -16226));
         assert_eq!(c.weight, 513);
+    }
+    #[test]
+    fn roof_rejects_height_bound_change() {
+        // Independent Java prefix for seed328: Y13,witch weight511 with bound16.
+        // A roof at16 would exceed the sampled-column control at14.
+        assert!(candidate(328,0,0,16,Mob::Witch,(-456,-760),10).is_none());
     }
     #[test]
     fn height_bounds_recalculate_same_region() {

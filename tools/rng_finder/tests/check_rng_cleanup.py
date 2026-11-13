@@ -9,7 +9,7 @@ import zlib
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from combine import read_nbt,write_nbt
 from rng_cleanup import SavedWorld,cleanup_positions,mark_cleanup,cleanup_litematic
-import gui
+import backend as gui
 
 # Java DataOutput.writeUTF vector: NUL + U+1F600 use modified UTF-8.
 value={'Text':(8,'\0😀')}
@@ -105,15 +105,16 @@ else:raise AssertionError('Client region limit was ignored')
 
 # The desktop exporter saves exactly one native file, not farm + cleanup alternatives.
 from types import SimpleNamespace
+import gui as legacy_gui
 with tempfile.TemporaryDirectory(prefix='cleanup-export-') as directory:
     native=write_nbt({'Regions':(10,{})},root_name='')
     fake=SimpleNamespace(result=(native,'plan'),root=None,status=SimpleNamespace(set=lambda _:None))
-    with patch.object(gui.filedialog,'askdirectory',return_value=directory), \
-         patch.object(gui.messagebox,'showinfo'), patch.object(gui.messagebox,'showerror') as error:
-        gui.FinderApp.export(fake)
+    with patch.object(legacy_gui.filedialog,'askdirectory',return_value=directory), \
+         patch.object(legacy_gui.messagebox,'showinfo'), patch.object(legacy_gui.messagebox,'showerror') as error:
+        legacy_gui.FinderApp.export(fake)
         assert (Path(directory)/'rng-combined.litematic').read_bytes()==native
         assert len(list(Path(directory).glob('*.litematic')))==1
-        gui.FinderApp.export(fake)
+        legacy_gui.FinderApp.export(fake)
         assert error.called and (Path(directory)/'rng-combined.litematic').read_bytes()==native
 print('Desktop saves exactly one native file and preserves existing exports')
 

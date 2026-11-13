@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import gui
+import backend as gui
 
 cases = [
     (gui.calculate_fortune, dict(seed='12345', ore='diamond', level='3', target='4', x='0', z='0', radius='25', advances='0', view='10'), 'Mansion region: 0, -1', '+64'),

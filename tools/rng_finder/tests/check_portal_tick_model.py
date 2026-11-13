@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
-import gui
+import backend as gui
 from terrain_scan import _classpath
 from combine import combine, read_nbt
 

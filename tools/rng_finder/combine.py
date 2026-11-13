@@ -182,16 +182,22 @@ def combine(grid_bytes, plan, extra=None, extra_name=None):
     player_pos = (x, y, z)
     view = int(re.search(r'(?:Server )?view distance:\s*(\d+)', plan, re.I).group(1))
     tile_tick = 'Grid type: scheduled repeater' in plan
-    marks.extend((tile_startup_marks if tile_tick else startup_marks)(player_pos, parts[0][1], view))
+    from autosave import detector_component, detector_marks
     if tile_tick:
-        from autosave import detector_component, detector_marks
-        parts.append(detector_component(player_pos, view))
-        merged = {tuple(mark[:3]): tuple(mark[3:]) for mark in marks}
-        for px, py, pz, block, meta in detector_marks(player_pos, parts[0][1], view):
-            if (px, py, pz) in merged and merged[px, py, pz] != (block, meta) and block != 218:
-                raise ValueError(f'Detector startup conflicts at {px}, {py}, {pz}')
-            merged[px, py, pz] = block, meta
-        marks = [(*position, *value) for position, value in merged.items()]
+        marks.extend(tile_startup_marks(player_pos, parts[0][1], view))
+    else:
+        marks.append((x - 1, y, z + 1, 69, 5))
+        for pz in range(z, z - 11, -1):
+            marks.append((x - 1, y, pz, 93 if pz == z - 7 else 55, 0))
+            if pz < z - 1:
+                marks.append((x - 1, y - 1, pz, 159, 11))
+    parts.append(detector_component(player_pos, view))
+    merged = {tuple(mark[:3]): tuple(mark[3:]) for mark in marks}
+    for px, py, pz, block, meta in detector_marks(player_pos, parts[0][1], view, tile_tick):
+        if (px, py, pz) in merged and merged[px, py, pz] != (block, meta) and block != 218:
+            raise ValueError(f'Detector startup conflicts at {px}, {py}, {pz}')
+        merged[px, py, pz] = block, meta
+    marks = [(*position, *value) for position, value in merged.items()]
     for dx in range(-1, 2):
         for dz in range(-1, 2):
             marks.append((x + dx, y-1, z + dz, 251, 3 if dx == 0 and dz == 0 else 11))
@@ -203,8 +209,19 @@ def combine(grid_bytes, plan, extra=None, extra_name=None):
         bound = re.search(r'Assumed Y bound:\s*(\d+)', plan)
         if not initial or not bound:
             raise ValueError('Missing mob height-control information')
-        ix, _, iz = map(int, initial.groups())
+        ix, spawn_y, iz = map(int, initial.groups())
         control = (ix, int(bound.group(1)) - 2, iz)
+        roof_y = spawn_y + 3
+        if roof_y >= control[1]:
+            raise ValueError('Height control: mob roof would change the modeled sampled-column bound; recalculate the candidate')
+        attempts = [tuple(map(int, values[1:])) for values in re.findall(r'(\d+)\.\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)', mob_attempts.group(1))]
+        if not attempts or any(ay != spawn_y for _, ay, _ in attempts):
+            raise ValueError('Missing or inconsistent mob roof spawn positions')
+        roof_min = (min([ix] + [p[0] for p in attempts]) - 15, min([iz] + [p[2] for p in attempts]) - 15)
+        roof_max = (max([ix] + [p[0] for p in attempts]) + 15, max([iz] + [p[2] for p in attempts]) + 15)
+        for rx in range(roof_min[0], roof_max[0] + 1):
+            for rz in range(roof_min[1], roof_max[1] + 1):
+                marks.append((rx, roof_y, rz, 44, 0))
         marks.append((*control, 1, 0))
         marks.append((ix, control[1] + 1, iz, 20, 0))
         for _, x, y, z in re.findall(r'(\d+)\.\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)', mob_attempts.group(1)):
@@ -212,7 +229,7 @@ def combine(grid_bytes, plan, extra=None, extra_name=None):
             if (x, z) == (ix, iz) and y <= control[1] <= y + 2:
                 raise ValueError('Height control block obstructs a modeled mob spawn')
             marks.append((x, y-1, z, 251, 5))
-            marks.append((x, y, z, 20, 0))
+
     low = [min([p[i] for _, p in parts] + [m[i] for m in marks]) for i in range(3)]
     high = [max([p[i] + root[('Width','Height','Length')[i]][1] - 1 for root, p in parts] + [m[i] for m in marks]) for i in range(3)]
     w, h, d = [high[i] - low[i] + 1 for i in range(3)]
@@ -259,6 +276,26 @@ def combine(grid_bytes, plan, extra=None, extra_name=None):
         if blocks[index] and (blocks[index], metadata[index]) != (block,meta):
             raise ValueError(f'Generated component at {x}, {y}, {z} conflicts with another schematic block')
         blocks[index], metadata[index] = block, meta
+    if mob_attempts:
+        floors = {(ax, ay-1, az) for ax, ay, az in attempts}
+        for xx in range(roof_min[0], roof_max[0]+1):
+            for zz in range(roof_min[1], roof_max[1]+1):
+                for yy in range(spawn_y-1, roof_y):
+                    if (xx,yy,zz) in floors:
+                        continue
+                    if low[0] <= xx <= high[0] and low[1] <= yy <= high[1] and low[2] <= zz <= high[2] and blocks[((yy-low[1])*d+zz-low[2])*w+xx-low[0]]:
+                        raise ValueError('Height control: a generated component crosses the roof interior or adds an unmodeled floor')
+        mob = re.search(r'^Target: (\w+)', plan, re.M).group(1)
+        headroom = 3 if mob == 'enderman' else 1 if mob == 'spider' else 2
+        radius = 1 if mob == 'spider' else 0
+        for ax, ay, az in attempts:
+            for dx in range(-radius, radius + 1):
+                for dz in range(-radius, radius + 1):
+                    for dy in range(headroom):
+                        xx, yy, zz = ax + dx, ay + dy, az + dz
+                        if low[0] <= xx <= high[0] and low[1] <= yy <= high[1] and low[2] <= zz <= high[2]:
+                            if blocks[((yy-low[1])*d + zz-low[2])*w + xx-low[0]]:
+                                raise ValueError('Height control: generated block obstructs the mob body/headroom')
     if control:
         cx, cy, cz = control
         for yy in range(cy + 1, high[1] + 1):
@@ -281,6 +318,16 @@ def combine(grid_bytes, plan, extra=None, extra_name=None):
     if tile_tick:
         label = label.replace('Green concrete marks modeled mob spawn floors. Glass occupies each modeled spawn block; remove it to permit spawning and clear the headroom. ', '')
         label = label.replace('The portal array uses valid 16x16 apertures in each Z slice; see its plan instructions for lighting sequence and conditional RNG assumptions.', 'The portal array is sliced: bottom obsidian is absent and stepped packed-ice/water floors move pigmen south through open fence gates into a dry receiving channel outside the portal chunk. Import all portal blocks without neighbor updates; normal lighting requires a temporary complete frame and update-suppressed slicing. Pigmen spawn above the lower platform. The export does not supply an update suppressor.')
+    if not tile_tick:
+        label = label.replace('Use its lever: switch it on, then off to extend and retract the normal piston; it shifts the slime and redstone-block line one block toward +Z. Blue terracotta supports the startup line between the player and detector. Repeaters connect the lever to the piston.',
+                              'Switch the single AFK lever ON and leave it on. Its edge primes the sand detector and pulses the original startup piston once. The separate detector output drives the preserved Xcom clock input; recurring pulses do not drive the startup piston. Allow a natural autosave for synchronization.')
+        label = label.replace('The elevated startup route and complete grid cycle remain unverified in Minecraft.',
+                              'Prepared vanilla1.12.2 view10 trials demonstrate repeated input cycles; mode-specific state alignment, transition failures and remaining conditional-roll limits are recorded in research/experiments/shared-command-detector/README.md. A detector pulse does not establish the predicted RNG result.')
+        gx, gy, gz = parts[0][1]
+        label += (f'RETROFIT ORIGINAL XCOM GRID ONLY: a non-air paste will not erase the obsolete detector. Before placing the new connected build in a world copy, clear its old detector box X={gx+194}..{gx+206}, Y={gy+3}..{gy+7}, Z={gz+12}..{gz+17}, except the clock input at ({gx+200},{gy+3},{gz+12}). '
+                  f'Also clear the old feed at Y={gy+6}, X={gx+194}..{gx+200}, Z={gz+4}; at X={gx+200}, Y={gy+6}, Z={gz+5}..{gz+11}; and at X={gx+200}, Y={gy+5}, Z={gz+7}..{gz+11}. Clear before the new paste, because replacement routes reuse part of this space. No world is edited by export.\n\n')
+    if any(not 0 <= m[1] <= 255 for m in marks):
+        raise ValueError('Generated component at detector route lies outside the 1.12 build height')
     if extra_name == 'Village schematic:':
         label += 'The Iron component includes 300 adults in separate cells and 24 wooden doors; see the plan for the count threshold and village conditions.\n\n'
     if entities:
@@ -290,8 +337,15 @@ def combine(grid_bytes, plan, extra=None, extra_name=None):
             ex, ey, ez = (value + delta for value, delta in zip(entity['Pos'][1][1], low))
             label += f'/summon minecraft:villager {ex:g} {ey:g} {ez:g} {{Age:0}}\n'
         label += '\n'
+    if mob_attempts:
+        label = label.replace('Green concrete marks modeled mob spawn floors. Glass occupies each modeled spawn block; remove it to permit spawning and clear the headroom.', 'Green concrete marks modeled mob spawn floors. Mob body volumes are air; clear the listed species-specific headroom before a non-air paste.')
+        label += (f'Mob roof bounds: {roof_min[0]}, {roof_y}, {roof_min[1]} to {roof_max[0]}, {roof_y}, {roof_max[1]}. Opaque bottom stone slabs, half=bottom; no roof-top spawning.\n'
+                  f'Mob clearance: {headroom} blocks high, {radius*2+1} x {radius*2+1} horizontal cells at each reported spawn block. Clear these volumes and any old glass guards before a non-air paste.\n'
+                  f'Sampled column highest opaque block: {control[1]}; heightmap={control[1]+1}; rounded Y bound={int(bound.group(1))}. Roof opacity is included below this control. Verify daytime light after placement.\n\n')
+        label += (f'Roof interior clearance: X={roof_min[0]}..{roof_max[0]}, Y={spawn_y-1}..{roof_y-1}, Z={roof_min[1]}..{roof_max[1]}, except the listed green floors. Keep all other cells air; spawn-proof any existing terrain below the roof shadow. No terrain is removed by export.\n\n')
     if control:
         label += f'Height control block (stone): {control[0]}, {control[1]}, {control[2]}. Glass above it prevents spawning without changing the heightmap; keep the rest of the column clear and verify the heightmap after construction.\n\n'
+    plan = re.sub(r'^Connected CLI output:.*\n?', '', plan, flags=re.M)
     plan = plan.replace('xcom-original-grid.schematic', 'included in combined schematic')
     plan = plan.replace('tile-tick-grid.schematic', 'included in combined schematic')
     plan = plan.replace('autosave-detector.schematic', 'included in combined schematic')

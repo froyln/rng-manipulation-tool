@@ -2,7 +2,7 @@ import re
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import gui
+import backend as gui
 gui.scan_terrain = lambda *_: (True, 'Terrain scan stubbed for next-match ordering checks.')
 
 cases = [

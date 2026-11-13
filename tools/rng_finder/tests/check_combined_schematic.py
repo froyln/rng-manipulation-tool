@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import gui
+import backend as gui
 from combine import read_nbt, placement, startup_marks, tile_startup_marks
 from terrain_scan import _classpath
 gui.scan_terrain = lambda *_: (True, 'Terrain scan stubbed for schematic-construction checks.')
@@ -14,21 +14,29 @@ gui.scan_terrain = lambda *_: (True, 'Terrain scan stubbed for schematic-constru
 values = dict(seed='12345', x='0', z='0', radius='128', view='10')
 data, plan = gui.calculate_golem(values)
 combined = read_nbt(data)
-reference = read_nbt((Path(__file__).resolve().parents[1] / 'reference/xcom-chunk-loading-grid.schematic').read_bytes())
+reference = read_nbt((Path(__file__).resolve().parents[1] / 'reference/xcom-shared-detector-grid.schematic').read_bytes())
 start = tuple(map(int, re.search(r'Combined schematic minimum corner: (-?\d+), (-?\d+), (-?\d+)', plan).groups()))
 grid = placement(plan, 'Grid component within combined schematic:')
 delta = tuple(grid[i] - start[i] for i in range(3))
 w, h, d = (combined[k][1] for k in ('Width','Height','Length'))
 rw, rh, rd = (reference[k][1] for k in ('Width','Height','Length'))
+from autosave import detector_marks
+player_match=re.search(r'Player position: (-?[\d.]+), (-?[\d.]+), (-?[\d.]+)',plan)
+player_pos=tuple(math.floor(float(v)) for v in player_match.groups())
+allowed={tuple(m[:3]):tuple(m[3:]) for m in detector_marks(player_pos,grid,10,False)}
 for y in range(rh):
     for z in range(rd):
         src = (y*rd+z)*rw
         dst = ((y+delta[1])*d+z+delta[2])*w+delta[0]
-        for key in ('Blocks', 'Data'):
-            assert combined[key][1][dst:dst+rw] == reference[key][1][src:src+rw], (key,y,z)
+        if all(combined[key][1][dst:dst+rw] == reference[key][1][src:src+rw] for key in ('Blocks','Data')):continue
+        for x in range(rw):
+            before=tuple(reference[key][1][src+x] for key in ('Blocks','Data'))
+            after=tuple(combined[key][1][dst+x] for key in ('Blocks','Data'))
+            if before!=after:
+                assert before==(0,0) and after==allowed[(grid[0]+x,grid[1]+y,grid[2]+z)],(x,y,z,before,after)
 original = reference['TileEntities'][1][1]
 merged = combined['TileEntities'][1][1]
-assert len(original) == 1887 and len(merged) == 1888
+assert len(original) == 1875 and len(merged) == 1880
 for before, after in zip(original, merged[:len(original)]):
     expected = dict(before)
     for axis, shift in zip(('x','y','z'), delta):
@@ -77,13 +85,18 @@ sign = merged[-1]
 assert sign['id'][1] == 'minecraft:sign' and sign['Text1'][1] == '{"text":"Player Spot"}'
 assert (sign['x'][1], sign['y'][1], sign['z'][1]) == (x+1-start[0], y-start[1], z+1-start[2])
 assert blocks[index + w*d + w + 1] == 63
-marks = startup_marks((x,y,z), grid, 10)
+from autosave import detector_marks
+marks = detector_marks((x,y,z), grid, 10, False)
 for mx,my,mz,block,meta in marks:
     i=((my-start[1])*d + mz-start[2])*w + mx-start[0]
-    assert (blocks[i],combined['Data'][1][i]) == (block,meta), (mx,my,mz,block,meta)
+    assert (blocks[i],combined['Data'][1][i]) == (block,meta), (mx,my,mz)
 assert (grid[0] + 188, grid[1] + 6, grid[2] - 1, 159, 11) in marks
 assert sum(block == 93 for _,_,_,block,_ in marks) >= 2
-print('Combined grid blocks, all 1887 tile entities, villager cage doors, player platform and sign verified')
+# The detector adapter must not shade the five outward sky columns of any village door.
+outer={(center[0]+side*(10+step),center[2]+dz) for side in (-1,1) for step in range(1,6) for dz in range(-6,7) if dz}
+assert not {(mx,mz) for mx,my,mz,block,meta in marks if my>=center[1] and block not in (55,93,94,69)} & outer
+
+print('Combined grid blocks, all 1875 retained grid tile entities and shared detector, villager cage doors, player platform and sign verified')
 
 for calculate, settings in [
     (gui.calculate, dict(seed='12345', mob='witch', x='0', z='0', radius='25', bound='16', view='10', players_min='1', players_max='1')),
@@ -92,7 +105,7 @@ for calculate, settings in [
 ]:
     schematic, text = calculate(settings)
     parsed = read_nbt(schematic)
-    assert len(parsed['TileEntities'][1][1]) == (6 if calculate == gui.calculate_portal else 1888)
+    assert len(parsed['TileEntities'][1][1]) == (6 if calculate == gui.calculate_portal else 1880)
     assert parsed['TileEntities'][1][1][-1]['Text1'][1] == '{"text":"Player Spot"}'
     assert 'Combined schematic minimum corner:' in text
     player_match = re.search(r'(?:Suggested mining/player position|Suggested player position|Player position):\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)', text, re.I)
@@ -100,11 +113,10 @@ for calculate, settings in [
     player_xyz = tuple(math.floor(float(value)) for value in player_match.groups())
     bounds = tuple(map(int, re.search(r'Combined schematic minimum corner: (-?\d+), (-?\d+), (-?\d+)', text).groups()))
     width, height, depth = (parsed[k][1] for k in ('Width','Height','Length'))
-    route = tile_startup_marks if calculate == gui.calculate_portal else startup_marks
-    for mx,my,mz,block,meta in route(player_xyz, gx, 10):
+    route = detector_marks(player_xyz, gx, 10, calculate == gui.calculate_portal)
+    for mx,my,mz,block,meta in route:
         i=((my-bounds[1])*depth + mz-bounds[2])*width + mx-bounds[0]
-        expected = (218,3) if calculate == gui.calculate_portal and (mx,my,mz) == (player_xyz[0]-1,player_xyz[1],player_xyz[2]-2) else (block,meta)
-        assert (parsed['Blocks'][1][i],parsed['Data'][1][i]) == expected, (mx,my,mz)
+        assert (parsed['Blocks'][1][i],parsed['Data'][1][i]) == (block,meta), (mx,my,mz)
     if calculate == gui.calculate:
         start = tuple(map(int, re.search(r'Combined schematic minimum corner: (-?\d+), (-?\d+), (-?\d+)', text).groups()))
         width, depth = parsed['Width'][1], parsed['Length'][1]
@@ -120,7 +132,7 @@ for calculate, settings in [
         for _, x, y, z in re.findall(r'(\d+)\.\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)', attempts):
             x, y, z = int(x), int(y), int(z)
             index = ((y-start[1])*depth + z-start[2])*width + x-start[0]
-            assert parsed['Blocks'][1][index] == 20
+            assert parsed['Blocks'][1][index] == 0
             assert parsed['Blocks'][1][index-width*depth] == 251
             assert parsed['Data'][1][index-width*depth] == 5
     if calculate == gui.calculate_portal:
