@@ -286,7 +286,7 @@ impl App {
             Message::Search(next) if !self.busy() => {
                 if self.shared["seed"].trim().is_empty() {
                     self.error = Some("Enter a world creation seed.".into());
-                    return widget::operation::focus("seed");
+                    return widget::operation::focus("seed").chain(focus::reveal());
                 }
                 self.serial += 1;
                 self.pending = self.session.join(format!("candidate-{}", self.serial));
@@ -445,9 +445,9 @@ impl App {
                 }
                 if key == Key::Named(Named::Tab) {
                     return if modifiers.shift() {
-                        widget::operation::focus_previous()
+                        widget::operation::focus_previous().chain(focus::reveal())
                     } else {
-                        widget::operation::focus_next()
+                        widget::operation::focus_next().chain(focus::reveal())
                     };
                 }
                 if modifiers.control() && key == Key::Named(Named::Enter) {
@@ -460,7 +460,7 @@ impl App {
             _ => {}
         }
         if let Some(field) = focus_field {
-            return widget::operation::focus(field);
+            return widget::operation::focus(field).chain(focus::reveal());
         }
         Task::none()
     }
@@ -844,7 +844,7 @@ impl App {
             background: Some(SURFACE.into()),
             ..Default::default()
         });
-        let shared: Element<_> = if size.width < 700.0 {
+        let shared: Element<_> = if size.width < 940.0 {
             column![
                 self.field("seed", "World creation seed"),
                 row![
@@ -868,11 +868,15 @@ impl App {
         };
         let panels = widget::responsive(|size| {
             if size.width < 940.0 {
-                scrollable(column![self.settings(), self.results()].spacing(24)).into()
+                scrollable(column![self.settings(), self.results()].spacing(24))
+                    .id("panels")
+                    .into()
             } else {
                 row![
-                    container(scrollable(self.settings())).width(Length::FillPortion(2)),
-                    container(scrollable(self.results())).width(Length::FillPortion(3))
+                    container(scrollable(self.settings()).id("settings"))
+                        .width(Length::FillPortion(2)),
+                    container(scrollable(self.results()).id("results"))
+                        .width(Length::FillPortion(3))
                 ]
                 .spacing(24)
                 .into()
@@ -888,6 +892,7 @@ impl App {
         }
         let body: Element<_> = if compact {
             scrollable(body.push(self.settings()).push(self.results()).spacing(20))
+                .id("body")
                 .height(Fill)
                 .into()
         } else {
